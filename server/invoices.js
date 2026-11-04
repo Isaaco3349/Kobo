@@ -1,13 +1,11 @@
 import { canonical, fromUnits, invoiceTotal, memoPayload, dueMs, HEX64 } from "../web/lib.js";
 import { sha256hex } from "./ids.js";
-import { relay, RelayError } from "./relay.js";
+import { relay } from "./relay.js";
+import { ApiError, RelayError } from "./errors.js";
 
-export class ApiError extends Error {
-  constructor(message, status = 400) {
-    super(message);
-    this.status = status;
-  }
-}
+export { ApiError };
+
+const CHAINS = { eth: "Ethereum", arb: "Arbitrum", base: "Base", sol: "Solana", btc: "Bitcoin", near: "NEAR" };
 
 const str = (v, min, max, name) => {
   if (typeof v !== "string" || v.trim().length < min || v.length > max) throw new ApiError(`${name} must be ${min}-${max} characters`);
@@ -21,7 +19,7 @@ export class Invoices {
 
   // ---- create -------------------------------------------------------------------------------
   /** details = human-readable invoice. envelope = freelancer-signed create_invoice call. */
-  create(details, envelope, now = Date.now()) {
+  async create(details, envelope, now = Date.now()) {
     const d = {
       client_name: str(details?.client_name, 1, 80, "client_name"),
       title: str(details?.title, 1, 120, "title"),
@@ -53,15 +51,26 @@ export class Invoices {
     if (call.method !== "create_invoice") throw new ApiError("Envelope must be a create_invoice call");
     if (this.store.getInvoice(id)) throw new ApiError("Invoice id already exists", 409);
 
-    let tx;
-    try { tx = relay(this.chain, this.config, envelope, now); }
-    catch (e) { if (e instanceof RelayError) throw new ApiError(e.message, e.status); throw e; }
+    const tx = await relay(this.chain, this.config, envelope, now);
 
     const inv = {
       id, owner, ...d, total, currency: "USDC", due_ms: args.due_ms, memo_hash,
       status: "open", created_at: now, create_tx: tx.hash, attempts: [],
       events: [{ at: now, type: "created", text: "Invoice created and recorded on NEAR. Gas paid by the Kobo relayer.", tx: tx.hash }],
     };
+    return this.store.putInvoice(inv);
+  }
+
+  // ---- cancel (owner-signed, gasless) -------------------------------------------------------
+  async cancel(id, envelope, now = Date.now()) {
+    const inv = this._need(id);
+    const call = envelope?.delegate;
+    if (call?.sender !== inv.owner) throw new ApiError("Only the invoice owner can cancel", 403);
+    if (call.method !== "cancel_invoice" || call.args?.id !== id) throw new ApiError("Envelope must be cancel_invoice for this invoice");
+    if (inv.status !== "open" && inv.status !== "refunded") throw new ApiError(`A ${inv.status} invoice cannot be cancelled`, 409);
+    const tx = await relay(this.chain, this.config, envelope, now);
+    inv.status = "cancelled";
+    inv.events.push({ at: now, type: "cancelled", text: "Invoice cancelled by its owner.", tx: tx.hash });
     return this.store.putInvoice(inv);
   }
 
@@ -75,8 +84,13 @@ export class Invoices {
 
     const common = { originAsset, amountOutUnits: inv.total, recipient: inv.owner, refundTo, invoiceId: id };
     const deadline = new Date(now + 30 * 60 * 1000).toISOString();
-    await this.intents.quote({ ...common, deadline, dry: true }); // preview first; only commit on confirm
-    const res = await this.intents.quote({ ...common, deadline, dry: false });
+    try {
+      await this.intents.quote({ ...common, deadline, dry: true }); // preview first; only commit on confirm
+      var res = await this.intents.quote({ ...common, deadline, dry: false });
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      throw new ApiError(`NEAR Intents could not quote this payment: ${e.message}`, 502);
+    }
     const q = res.quote;
     if (!q?.depositAddress) throw new ApiError("Quote did not return a deposit address", 502);
 
@@ -90,16 +104,46 @@ export class Invoices {
       origin_tx: null, settle_tx: null, refund_tx: null,
     };
     inv.attempts.push(attempt);
-    const CHAINS = { eth: "Ethereum", arb: "Arbitrum", base: "Base", sol: "Solana", btc: "Bitcoin", near: "NEAR" };
-    const chainLabel = CHAINS[attempt.origin_chain] || attempt.origin_chain.toUpperCase();
+    const chainLabel = CHAINS[attempt.origin_chain] || String(attempt.origin_chain).toUpperCase();
     inv.events.push({ at: now, type: "quote", text: `Payment details issued: send ${q.amountInFormatted} ${attempt.origin_symbol} on ${chainLabel}.` });
     this.store.putInvoice(inv);
     return attempt;
   }
 
-  // ---- status: pull from Intents, then write the result to the contract ----------------------
+  /** Client tells us their deposit transaction hash so Intents notices it faster. */
+  async submitDeposit(id, txHash) {
+    const inv = this._need(id);
+    const att = inv.attempts[inv.attempts.length - 1];
+    if (!att || att.finalised) throw new ApiError("No payment in progress", 409);
+    if (typeof txHash !== "string" || txHash.length < 8 || txHash.length > 200 || /\s/.test(txHash)) throw new ApiError("That does not look like a transaction hash");
+    try { await this.intents.submitDeposit(txHash, att.deposit_address); }
+    catch (e) { throw new ApiError(`NEAR Intents rejected the hash: ${e.message}`, 502); }
+    att.client_tx = txHash;
+    this.store.putInvoice(inv);
+    return { ok: true };
+  }
+
+  // ---- status: pull from the chain and from Intents, then write the result to the contract ----
   async refresh(id, now = Date.now()) {
     const inv = this._need(id);
+    if (["paid", "cancelled"].includes(inv.status)) return inv;
+
+    // Trustless path: the contract itself may already say Paid (client used ft_transfer_call).
+    const onchain = await this.chain.view(id).catch(() => null);
+    if (onchain?.status === "Paid") {
+      const att = inv.attempts[inv.attempts.length - 1];
+      if (att) att.finalised = true;
+      inv.status = "paid";
+      inv.paid_at = onchain.paid_ms || now;
+      inv.events.push({ at: now, type: "paid", text: `Paid: ${fromUnits(inv.total)} USDC received directly on NEAR (trustless path).`, tx: onchain.source_tx || undefined, direct: true });
+      return this.store.putInvoice(inv);
+    }
+    if (onchain?.status === "Cancelled") {
+      inv.status = "cancelled";
+      inv.events.push({ at: now, type: "cancelled", text: "Invoice cancelled on-chain." });
+      return this.store.putInvoice(inv);
+    }
+
     const att = inv.attempts[inv.attempts.length - 1];
     if (!att || !["open", "pending"].includes(inv.status) || att.finalised) return inv;
 
@@ -112,29 +156,25 @@ export class Invoices {
     if (st.status === "PROCESSING" || st.status === "KNOWN_DEPOSIT_TX") {
       if (inv.status !== "pending") {
         inv.status = "pending";
-        inv.events.push({ at: now, type: "deposit", text: "Deposit detected. NEAR Intents is converting it to USDC." });
+        inv.events.push({ at: now, type: "deposit", text: "Deposit detected. NEAR Intents is converting it to USDC.", tx: originTx?.hash, url: originTx?.explorerUrl || undefined });
       }
     } else if (st.status === "INCOMPLETE_DEPOSIT") {
       if (!att.warned) { att.warned = true; inv.events.push({ at: now, type: "warning", text: "Deposit received but below the required amount. Send the remainder or it will be refunded." }); }
     } else if (st.status === "SUCCESS") {
-      let settle = sd.destinationChainTxHashes?.[0]?.hash;
-      if (!settle && this.intents.mode === "demo") settle = this.chain.recordSettlement({ to: inv.owner, amount: inv.total, now }).hash;
+      const dest = sd.destinationChainTxHashes?.[0];
+      let settle = dest?.hash;
+      if (!settle && this.intents.mode === "demo" && typeof this.chain.recordSettlement === "function") settle = (await this.chain.recordSettlement({ to: inv.owner, amount: inv.total, now })).hash;
       if (sd.amountOut && BigInt(sd.amountOut) < BigInt(inv.total)) throw new ApiError("Intents delivered less than the invoice amount; not marking paid", 502);
-      const tx = this.chain.call({
-        predecessor: this.config.verifierId, method: "attest_payment",
-        args: { id, received: inv.total, source_tx: settle || "" }, now,
-      });
+      const tx = await this.chain.call({ method: "attest_payment", args: { id, received: inv.total, source_tx: settle || "" }, now });
       att.settle_tx = settle || null;
       att.finalised = true;
       inv.status = "paid";
       inv.paid_at = now;
       inv.paid_tx = tx.hash;
-      inv.events.push({ at: now, type: "paid", text: `Paid: ${fromUnits(inv.total)} USDC settled to the freelancer's account.`, tx: settle || tx.hash });
+      inv.events.push({ at: now, type: "paid", text: `Paid: ${fromUnits(inv.total)} USDC settled to the freelancer's account.`, tx: settle || tx.hash, url: dest?.explorerUrl || undefined });
     } else if (st.status === "REFUNDED") {
       const refundTx = sd.refundedChainTxHashes?.[0]?.hash || sd.originChainTxHashes?.[0]?.hash || "";
-      const tx = this.chain.call({
-        predecessor: this.config.verifierId, method: "attest_refund", args: { id, refund_tx: refundTx }, now,
-      });
+      const tx = await this.chain.call({ method: "attest_refund", args: { id, refund_tx: refundTx }, now });
       att.refund_tx = refundTx || null;
       att.finalised = true;
       inv.status = "refunded";
@@ -147,13 +187,23 @@ export class Invoices {
     return this.store.putInvoice(inv);
   }
 
-  cancel() { /* cancellation is a signed on-chain call; see POST /api/relay */ }
+  /** Background job: settle everything that is waiting on a payment, even if nobody has the page open. */
+  async pollPending(now = Date.now()) {
+    let n = 0;
+    for (const inv of Object.values(this.store.data.invoices)) {
+      const att = inv.attempts[inv.attempts.length - 1];
+      const waiting = inv.status === "pending" || (inv.status === "open" && att && !att.finalised);
+      if (!waiting) continue;
+      try { await this.refresh(inv.id, now); n++; } catch (e) { console.error(`poll ${inv.id}: ${e.message}`); }
+    }
+    return n;
+  }
 
   // ---- views --------------------------------------------------------------------------------
   /** Safe for the public pay page. */
-  publicView(inv, now = Date.now()) {
+  async publicView(inv, now = Date.now()) {
     const att = inv.attempts[inv.attempts.length - 1] || null;
-    const onchain = this.chain.view(inv.id);
+    const onchain = await this.chain.view(inv.id).catch(() => null);
     return {
       id: inv.id, owner: inv.owner, client_name: inv.client_name, title: inv.title, note: inv.note,
       items: inv.items, total: inv.total, total_formatted: fromUnits(inv.total), currency: "USDC",

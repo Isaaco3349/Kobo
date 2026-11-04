@@ -19,6 +19,9 @@ export const fmtTime = (ms) => new Date(ms).toLocaleString(undefined, { dateStyl
 
 export const dots = (text, opts) => dotSvg(text, opts);
 
+/** Demo receipts live on our own /tx page; live receipts go to the public NEAR explorer. */
+export const txUrl = (cfg, hash) => (cfg.mode === "demo" ? `/tx/${hash}` : `${cfg.explorerTx}${hash}`);
+
 export const STATUS_LABEL = { open: "Unpaid", pending: "In progress", paid: "Paid", refunded: "Refunded", cancelled: "Cancelled" };
 export function pill(inv) {
   const key = inv.overdue && inv.status !== "pending" ? "overdue" : inv.status;

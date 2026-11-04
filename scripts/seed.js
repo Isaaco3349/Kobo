@@ -23,16 +23,16 @@ const sign = (method, args) => {
 };
 const day = (offset) => new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10);
 
-const make = (details) => {
+const make = async (details) => {
   const id = makeInvoiceId(crypto.randomBytes(8));
   const memo_hash = sha256hex(canonical(memoPayload({ ...details, id, owner: account })));
   const env = sign("create_invoice", { id, amount: invoiceTotal(details.items), due_ms: dueMs(details.due_date), memo_hash });
-  return app.svc.create(details, env);
+  return await app.svc.create(details, env);
 };
 
-const paid = make({ client_name: "Northwind Labs", title: "Smart contract audit, week 1", due_date: day(7), note: "Net 14", items: [{ description: "Audit hours", qty: "20", unit_price: "95" }, { description: "Written report", qty: "1", unit_price: "300" }] });
-const open = make({ client_name: "Acme Studio Ltd", title: "Brand identity sprint", due_date: day(14), note: "", items: [{ description: "Logo concepts", qty: "1", unit_price: "400" }, { description: "Design hours", qty: "7.5", unit_price: "60" }] });
-const overdue = make({ client_name: "Lagos Fintech Co", title: "Landing page build", due_date: day(-6), note: "Reminder sent", items: [{ description: "Frontend development", qty: "1", unit_price: "1200" }] });
+const paid = await make({ client_name: "Northwind Labs", title: "Smart contract audit, week 1", due_date: day(7), note: "Net 14", items: [{ description: "Audit hours", qty: "20", unit_price: "95" }, { description: "Written report", qty: "1", unit_price: "300" }] });
+const open = await make({ client_name: "Acme Studio Ltd", title: "Brand identity sprint", due_date: day(14), note: "", items: [{ description: "Logo concepts", qty: "1", unit_price: "400" }, { description: "Design hours", qty: "7.5", unit_price: "60" }] });
+const overdue = await make({ client_name: "Lagos Fintech Co", title: "Landing page build", due_date: day(-6), note: "Reminder sent", items: [{ description: "Frontend development", qty: "1", unit_price: "1200" }] });
 
 const ETH = "nep141:eth.omft.near";
 await app.svc.quote(paid.id, { originAsset: ETH, refundTo: "0x2527D02599Ba641c19FEa793cD0F167589a0f10D" });

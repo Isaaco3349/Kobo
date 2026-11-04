@@ -43,7 +43,7 @@ Honesty first, because the demo has to run anywhere.
 | NEAR Intents (1Click) | **Simulated** by a deterministic local mock with the same request/response shapes (EXACT_OUTPUT quote, deposit address, status values). | `server/intents.js` `LiveIntents` calls `https://1click.chaindefuser.com` |
 | Gas | **Simulated** (a fixed fee is recorded as "paid by the relayer"). | Real gas paid by a funded relayer account |
 
-**Status of live mode:** the live 1Click client is written but not yet exercised against the network, and the live NEAR adapter (real relayer submission, contract deployment, verifier signing) is **not wired yet**: `KOBO_MODE=live` exits with a clear message. This README will be updated the moment it is.
+**Status of live mode:** the live adapter is written and tested against a fake NEAR RPC that decodes every transaction it sends and checks it against the reference `@near-js` libraries (byte-for-byte). It has **not yet been run against the real network by the author**. Setup and a one-payment rehearsal are in [docs/LIVE.md](docs/LIVE.md); `npm run doctor` checks every dependency.
 
 ## What the statuses mean
 
@@ -92,8 +92,10 @@ scripts/     seed.js
 ## Tests
 
 ```sh
-npm test                          # 10 Node tests: money maths, full paid and refund flows,
-                                  # relayer rejections, ownership, CSV injection
+npm install                       # dev only: reference NEAR libraries used by the parity tests
+npm test                          # 23 Node tests: money maths, paid/refund/cancel flows, relayer rejections,
+                                  # trustless USDC path, background poller, CSV injection, live adapter
+                                  # against a fake RPC, byte parity with @near-js
 cd contract && cargo test         # 16 contract tests
 ```
 
@@ -115,7 +117,7 @@ Methods: `create_invoice`, `cancel_invoice`, `ft_on_transfer`, `attest_payment`,
 
 * All code was written during the hackathon window. There is no pre-existing baseline.
 * Largely written with AI assistance (Claude), then reviewed and tested.
-* Runtime dependencies: none (Node standard library only). Contract: `near-sdk`.
+* Runtime dependencies: none (Node standard library only). Dev only: `@near-js/*` for parity tests. Contract: `near-sdk`.
 * NEAR features used: NEAR Intents 1Click API (quote, deposit, status), NEP-141 `ft_transfer_call` receiver, NEP-366-style meta transactions, implicit accounts.
 
 ## License

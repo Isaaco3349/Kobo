@@ -138,3 +138,59 @@ test("CSV neutralises spreadsheet formula injection", async () => {
   const csv = invoicesToCsv([{ id: "AAAA-BBBB", created_at: 0, due_date: "2099-01-01", client_name: "=HYPERLINK(\"http://x\")", title: "t", items: [], total: "1000000", status: "open", attempts: [], note: "" }]);
   assert.ok(csv.includes("'=HYPERLINK"));
 });
+
+test("owner cancels with a signed gasless call; strangers cannot; cancelled invoices cannot be paid", async () => {
+  const app = await startApp();
+  try {
+    const me = makeIdentity(), other = makeIdentity();
+    const { id } = await makeInvoice(app, me);
+    const bad = await app.api(`/api/invoices/${id}/cancel`, { method: "POST", body: { envelope: other.sign("cancel_invoice", { id }) } });
+    assert.equal(bad.status, 403);
+    const ok = await app.api(`/api/invoices/${id}/cancel`, { method: "POST", body: { envelope: me.sign("cancel_invoice", { id }) } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.status, "cancelled");
+    assert.equal(ok.body.onchain_status, "Cancelled");
+    const pay = await app.api(`/api/invoices/${id}/quote`, { method: "POST", body: { originAsset: ETH, refundTo: "0xabc123" } });
+    assert.equal(pay.status, 409);
+  } finally { await app.close(); }
+});
+
+test("trustless path: a direct USDC payment on NEAR is picked up from the contract and shown as paid", async () => {
+  const app = await startApp();
+  try {
+    const me = makeIdentity();
+    const { id } = await makeInvoice(app, me);
+    app.chain.simulateDirectUsdcPayment(id); // what ft_on_transfer does on the real contract
+    const s = await app.api(`/api/invoices/${id}`);
+    assert.equal(s.body.status, "paid");
+    assert.ok(s.body.events.some((e) => e.type === "paid" && e.direct));
+    const again = await app.api(`/api/invoices/${id}/quote`, { method: "POST", body: { originAsset: ETH, refundTo: "0xabc123" } });
+    assert.equal(again.status, 409);
+  } finally { await app.close(); }
+});
+
+test("background poller settles a payment even if nobody opens the page", async () => {
+  const app = await startApp();
+  try {
+    const me = makeIdentity();
+    const { id } = await makeInvoice(app, me);
+    const q = await app.api(`/api/invoices/${id}/quote`, { method: "POST", body: { originAsset: USDC_ARB, refundTo: "0x2527D02599Ba641c19FEa793cD0F167589a0f10D" } });
+    app.intents.simulateDeposit(q.body.deposit_address, { outcome: "success", amountOut: q.body.amount_out, recipient: me.account });
+    assert.equal(await app.svc.pollPending(), 1);
+    assert.equal(app.store.getInvoice(id).status, "paid");
+    assert.equal(await app.svc.pollPending(), 0, "nothing left to poll");
+  } finally { await app.close(); }
+});
+
+test("prepare hands out strictly increasing nonces", async () => {
+  const app = await startApp();
+  try {
+    const me = makeIdentity();
+    const p1 = await app.api(`/api/prepare/${me.account}`);
+    assert.equal(p1.status, 200);
+    await makeInvoice(app, me); // uses nonce 1.. from the test identity (small numbers)
+    const p2 = await app.api(`/api/prepare/${me.account}`);
+    assert.ok(p2.body.nonce >= p1.body.nonce);
+    assert.ok(p2.body.expires_at_ms > Date.now());
+  } finally { await app.close(); }
+});

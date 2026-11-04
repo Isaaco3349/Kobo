@@ -1,4 +1,4 @@
-import { $, $$, api, dots, esc, usd, short, fmtDate, fmtTime, pill, copy, initTheme, toast, countdown } from "./ui.js";
+import { $, $$, api, dots, esc, usd, short, fmtDate, fmtTime, pill, copy, initTheme, toast, countdown, txUrl } from "./ui.js";
 import { group } from "./lib.js";
 
 initTheme();
@@ -23,8 +23,21 @@ function tokenSelect() {
     `<optgroup label="${esc(chainName(c))}">${byChain[c].map((t) => `<option value="${esc(t.assetId)}" ${t.assetId === picked.asset ? "selected" : ""}>${esc(t.symbol)} on ${esc(chainName(c))}</option>`).join("")}</optgroup>`).join("");
 }
 
-function txLink(hash, label) {
-  return hash ? `<a href="/tx/${esc(hash)}">${esc(label || short(hash, 8, 6))}</a>` : "";
+function txLink(hash, label, url) {
+  if (!hash && !url) return "";
+  const href = url || txUrl(cfg, hash);
+  const ext = /^https?:/.test(href) ? ' target="_blank" rel="noopener"' : "";
+  return `<a href="${esc(href)}"${ext}>${esc(label || short(hash, 8, 6))}</a>`;
+}
+
+function directPanel(v) {
+  if (!cfg.usdcContract) return "";
+  const args = JSON.stringify({ receiver_id: cfg.contractId, amount: v.total, msg: v.id });
+  return `<details class="card" style="margin-top:16px"><summary class="eyebrow" style="cursor:pointer">Already hold USDC on NEAR? Pay directly, no conversion</summary>
+    <p class="hint" style="margin-top:12px">Call <b>ft_transfer_call</b> on the USDC contract <code>${esc(cfg.usdcContract)}</code> from your NEAR wallet with 1 yoctoNEAR attached and these arguments. The invoice contract checks the amount and forwards it to the freelancer in the same step. Nobody has to be trusted to mark it paid.</p>
+    <pre>${esc(args)}</pre>
+    ${cfg.mode === "demo" ? `<div class="demo"><b>DEMO</b> <button class="btn small" id="simDirect">Simulate direct USDC payment</button></div>` : ""}
+  </details>`;
 }
 
 function render() {
@@ -67,13 +80,17 @@ function render() {
       <div class="addr"><code>${esc(a.deposit_address)}</code><button class="btn small" id="cpAddr">Copy</button></div>
       ${a.deposit_memo ? `<div class="hint" style="margin-top:8px">Memo (required): <b>${esc(a.deposit_memo)}</b></div>` : ""}
       <div class="hint" style="margin-top:10px">Send only ${esc(a.origin_symbol)} on ${esc(chainName(a.origin_chain))} to this address. This page updates by itself.</div>
+      <div class="addr" style="margin-top:14px"><input id="clientTx" placeholder="Optional: paste your transaction hash to speed things up" value="${esc(a.client_tx || "")}"><button class="btn ghost small" id="sendHash">I sent it</button></div>
+      ${a.origin_tx?.hash ? `<div class="hint" style="margin-top:8px">Your deposit: ${a.origin_tx.explorerUrl ? txLink(a.origin_tx.hash, short(a.origin_tx.hash, 10, 8), a.origin_tx.explorerUrl) : esc(short(a.origin_tx.hash, 10, 8))}</div>` : ""}
       ${cfg.mode === "demo" ? `<div class="demo"><b>DEMO</b> no wallet needed here, so stand in for the client:
         <button class="btn small" id="simOk">Simulate payment</button><button class="btn ghost small" id="simRef">Simulate failed swap (refund)</button></div>` : ""}
     </div>` : ""}
 
+    ${["open", "refunded"].includes(v.status) ? directPanel(v) : ""}
+
     <div class="card" style="margin-top:16px">
       <div class="eyebrow">Status</div>
-      <ul class="timeline">${[...v.events].reverse().map((e) => `<li class="${esc(e.type)}"><time>${fmtTime(e.at)}</time>${esc(e.text)} ${e.tx ? txLink(e.tx, "view receipt") : ""}</li>`).join("")}</ul>
+      <ul class="timeline">${[...v.events].reverse().map((e) => `<li class="${esc(e.type)}"><time>${fmtTime(e.at)}</time>${esc(e.text)} ${e.tx || e.url ? txLink(e.tx, "view receipt", e.url) : ""}</li>`).join("")}</ul>
     </div>`;
 
   clearInterval(cdTimer);
@@ -90,6 +107,8 @@ function render() {
     $("#getPay").onclick = getPay;
   }
   if ($("#cpAddr")) $("#cpAddr").onclick = (e) => copy(a.deposit_address, e.target);
+  if ($("#sendHash")) $("#sendHash").onclick = sendHash;
+  if ($("#simDirect")) $("#simDirect").onclick = simDirect;
   if ($("#simOk")) $("#simOk").onclick = () => sim("success");
   if ($("#simRef")) $("#simRef").onclick = () => sim("refund");
 }
@@ -102,6 +121,16 @@ async function getPay() {
     await api(`/api/invoices/${id}/quote`, { method: "POST", body: { originAsset: picked.asset, refundTo: picked.refund } });
     await load();
   } catch (e) { $("#payMsg").textContent = e.message; btn.disabled = false; }
+}
+async function sendHash() {
+  const txHash = $("#clientTx").value.trim();
+  if (!txHash) return toast("Paste the transaction hash first", "err");
+  try { await api(`/api/invoices/${id}/deposit`, { method: "POST", body: { txHash } }); toast("Thanks. NEAR Intents has been told to look for it."); await load(); }
+  catch (e) { toast(e.message, "err"); }
+}
+async function simDirect() {
+  try { await api(`/api/demo/direct/${id}`, { method: "POST", body: {} }); toast("Simulated: client paid USDC directly on NEAR"); await load(); }
+  catch (e) { toast(e.message, "err"); }
 }
 async function sim(outcome) {
   try { await api(`/api/demo/pay/${id}`, { method: "POST", body: { outcome } }); toast(outcome === "refund" ? "Simulated: swap failed, refunding" : "Simulated: client sent the funds"); await load(); }

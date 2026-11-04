@@ -1,6 +1,6 @@
 import { $, $$, api, dots, esc, usd, short, fmtDate, pill, copy, initTheme, toast } from "./ui.js";
 import { getIdentity, signCall, backupKey, restoreKey, supported, sha256hex } from "./identity.js";
-import { canonical, memoPayload, dueMs, invoiceTotal, fromUnits, group, makeInvoiceId } from "./lib.js";
+import { canonical, memoPayload, dueMs, invoiceTotal, fromUnits, makeInvoiceId } from "./lib.js";
 
 initTheme();
 let cfg, me, pollTimer;
@@ -22,7 +22,7 @@ function row(inv) {
     <td class="hide-s">${esc(inv.due_date)}</td>
     <td>${usd(inv.total_formatted)}</td>
     <td>${pill(inv)}</td>
-    <td class="r"><button class="btn ghost small" data-copy="${link}">Copy link</button> <a class="btn small" href="/i/${inv.id}" target="_blank" rel="noopener">Open</a></td>
+    <td class="r">${["open", "refunded"].includes(inv.status) ? `<button class="btn ghost small" data-cancel="${inv.id}">Cancel</button> ` : ""}<button class="btn ghost small" data-copy="${link}">Copy link</button> <a class="btn small" href="/i/${inv.id}" target="_blank" rel="noopener">Open</a></td>
   </tr>`;
 }
 
@@ -40,8 +40,20 @@ async function refresh() {
     ? `<table class="invlist"><thead><tr><th>Invoice</th><th>Client</th><th class="hide-s">Due</th><th>Amount</th><th>Status</th><th class="r"></th></tr></thead><tbody>${data.invoices.map(row).join("")}</tbody></table>`
     : `<div class="empty">No invoices yet. Create your first one below.</div>`;
   $$("[data-copy]").forEach((b) => (b.onclick = () => copy(b.dataset.copy, b)));
+  $$("[data-cancel]").forEach((b) => (b.onclick = () => cancelInvoice(b.dataset.cancel, b)));
   clearTimeout(pollTimer);
   if (data.invoices.some((i) => i.status === "pending")) pollTimer = setTimeout(refresh, 3000);
+}
+
+async function cancelInvoice(id, btn) {
+  if (!confirm(`Cancel invoice ${id}? This is recorded on NEAR and cannot be undone.`)) return;
+  btn.disabled = true;
+  try {
+    const envelope = await signCall("cancel_invoice", { id }, cfg);
+    await api(`/api/invoices/${id}/cancel`, { method: "POST", body: { envelope } });
+    toast(`Invoice ${id} cancelled.`);
+    await refresh();
+  } catch (err) { toast(err.message, "err"); btn.disabled = false; }
 }
 
 // ---- form ----------------------------------------------------------------------------------
@@ -68,14 +80,14 @@ $("#form").onsubmit = async (e) => {
   const btn = $("#submit");
   btn.disabled = true;
   $("#formMsg").className = "hint";
-  $("#formMsg").textContent = "Signing and recording on NEAR…";
+  $("#formMsg").textContent = cfg.mode === "live" ? "Setting up your account and recording on NEAR. First time takes a few seconds…" : "Signing and recording on NEAR…";
   try {
     const details = { client_name: $("#client").value.trim(), title: $("#title").value.trim(), due_date: $("#due").value, note: $("#note").value.trim(), items: readItems() };
     const total = invoiceTotal(details.items);
     if (BigInt(total) <= 0n) throw new Error("Total must be greater than zero");
     const id = makeInvoiceId(crypto.getRandomValues(new Uint8Array(8)));
     const memo_hash = await sha256hex(canonical(memoPayload({ ...details, id, owner: me.account })));
-    const envelope = await signCall("create_invoice", { id, amount: total, due_ms: dueMs(details.due_date), memo_hash }, cfg.contractId);
+    const envelope = await signCall("create_invoice", { id, amount: total, due_ms: dueMs(details.due_date), memo_hash }, cfg);
     const inv = await api("/api/invoices", { method: "POST", body: { details, envelope } });
     const link = `${location.origin}/i/${inv.id}`;
     $("#created").hidden = false;
