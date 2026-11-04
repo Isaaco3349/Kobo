@@ -1,0 +1,15 @@
+{
+  "name": "kobo",
+  "version": "0.1.0",
+  "description": "KOBO - invoices that settle themselves. Stablecoin invoicing for freelancers on NEAR: clients pay from any chain via NEAR Intents, freelancers receive USDC and never touch gas.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "demo": "KOBO_MODE=demo node server/index.js",
+    "test": "node --test test/*.test.js",
+    "seed": "node scripts/seed.js"
+  }
+}

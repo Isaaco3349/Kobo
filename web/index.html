@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KOBO | Invoices that settle themselves</title>
+  <meta name="description" content="Stablecoin invoicing on NEAR. Your client pays from any chain, you receive USDC, you never buy gas.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230a7d4f'/><circle cx='16' cy='16' r='6' fill='%23e9e1ce'/></svg>">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top"><div class="wrap">
+    <a class="brand" href="#top"><i></i>KOBO<small id="modeTag">Demo</small></a>
+    <nav class="main"><a href="#desk">Desk</a><a href="#invoices">Invoices</a><a href="#new">New invoice</a><a href="#how">How it works</a></nav>
+    <div class="tools"><button class="btn dark" id="theme" aria-label="Toggle dark mode">◐</button><a class="btn" href="#new">New invoice ↗</a></div>
+  </div></header>
+
+  <main id="top">
+    <div class="wrap hero">
+      <h1>KOBO</h1>
+      <p class="sub">The era of <b>boring money</b> starts here. Your client pays from any chain. You receive USDC. You never buy gas.</p>
+      <div class="stage">
+        <div class="cap eyebrow"><span>Make it real on NEAR</span><span id="stageAcct">—</span></div>
+        <div class="big" id="heroDots"></div>
+        <div class="label">RECEIVED</div>
+      </div>
+      <div class="heroBar">
+        <div class="l">Invoice links. Any token in, USDC out.<br><b>Receipts your accountant won't question.</b></div>
+        <div><a class="eyebrow" href="#how" style="margin-right:18px">How it works</a><a class="btn" href="#new">Create an invoice ↗</a></div>
+      </div>
+    </div>
+
+    <div class="marquee"><div id="marq"></div></div>
+
+    <section class="on-g glance" id="desk"><div class="wrap grid">
+      <div>
+        <div class="eyebrow">00 / Your desk</div>
+        <h2>Your desk<br>at a glance</h2>
+        <p class="copy">Your account was created in this browser. It is a NEAR account you control, and it holds no NEAR because it never needs to.<b id="acctFull" style="word-break:break-all;font-weight:600"></b></p>
+        <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn white small" id="copyAcct">Copy account</button>
+          <button class="btn white small" id="backup">Back up key</button>
+          <label class="btn white small" style="cursor:pointer">Restore<input type="file" id="restore" accept="application/json" hidden></label>
+        </div>
+      </div>
+      <div>
+        <div class="eyebrow">Received (USDC)</div>
+        <div class="bigtotal" id="glanceDots"></div>
+        <table class="ledger">
+          <thead><tr><th>Measure</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Awaiting payment</td><td id="sOut">$0.00</td></tr>
+            <tr><td>Overdue invoices</td><td id="sOver">0</td></tr>
+            <tr><td>Invoices issued</td><td id="sCount">0</td></tr>
+            <tr><td>NEAR you had to buy</td><td>0</td></tr>
+          </tbody>
+        </table>
+        <div class="foot">
+          <div><div class="eyebrow">Gas paid for you</div><div class="num" id="sGas">0</div></div>
+          <div class="tiny" id="gasNote">Calls the relayer has sponsored for your account.</div>
+        </div>
+      </div>
+    </div></section>
+
+    <section class="block" id="invoices"><div class="wrap">
+      <div class="head">
+        <div><div class="eyebrow">01 / Invoices</div><h2 style="margin-top:14px">Your invoices</h2></div>
+        <a class="btn ghost" id="csv" href="#">Export CSV for your accountant</a>
+      </div>
+      <div id="list"></div>
+    </div></section>
+
+    <section class="block" id="new"><div class="wrap">
+      <div class="head"><div><div class="eyebrow">02 / New invoice</div><h2 style="margin-top:14px">Get paid</h2></div></div>
+      <form class="card" id="form" autocomplete="off">
+        <div class="row">
+          <div class="field"><label for="client">Client</label><input id="client" required maxlength="80" placeholder="Acme Studio Ltd"></div>
+          <div class="field"><label for="due">Due date</label><input id="due" type="date" required></div>
+        </div>
+        <div class="field"><label for="title">What is this for?</label><input id="title" required maxlength="120" placeholder="Brand identity sprint"></div>
+        <div class="field"><label>Line items</label><div class="items" id="items"></div>
+          <button type="button" class="btn ghost small" id="addItem" style="align-self:flex-start">+ Add line</button></div>
+        <div class="field"><label for="note">Note (optional)</label><input id="note" maxlength="500" placeholder="Net 14. Thank you!"></div>
+        <div class="totalbar"><span class="eyebrow">Total due in USDC</span><b id="total">$0.00</b></div>
+        <div class="gasbox"><i></i><span>You sign this with your own key. The Kobo relayer pays the network fee, so you need <b>0 NEAR</b>.</span></div>
+        <div style="margin-top:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <button class="btn" id="submit" type="submit">Create invoice link ↗</button><span class="hint" id="formMsg"></span>
+        </div>
+      </form>
+      <div class="callout" id="created" hidden></div>
+    </div></section>
+
+    <section class="block" id="how"><div class="wrap">
+      <div class="head"><div><div class="eyebrow">03 / How it works</div><h2 style="margin-top:14px">Four steps.<br>No crypto lessons.</h2></div></div>
+      <div class="steps">
+        <div><div class="n">01</div><h3>Invoice</h3><p>You list what you did. Kobo records the amount and a fingerprint of the details on NEAR, gas paid by the relayer.</p></div>
+        <div><div class="n">02</div><h3>Share</h3><p>Send the link. Your client sees a normal invoice page and picks the token and chain they already hold.</p></div>
+        <div><div class="n">03</div><h3>Pay</h3><p>NEAR Intents converts whatever they send into exactly your invoice amount in USDC, on NEAR, delivered to you.</p></div>
+        <div><div class="n">04</div><h3>Reconcile</h3><p>Status flips to paid with transaction links. One CSV export gives your accountant every line.</p></div>
+      </div>
+    </div></section>
+  </main>
+
+  <footer><div class="wrap">KOBO · built for NEAR HACKATHON 2026 · Real-World Money track · <a href="https://github.com/nearai/near-hackathon-prompt-examples/blob/main/tracks/08-realworld.md">track brief</a></div></footer>
+</body>
+</html>
