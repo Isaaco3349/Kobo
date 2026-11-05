@@ -1,5 +1,5 @@
 import { $, $$, api, dots, esc, usd, short, fmtDate, pill, copy, initTheme, toast } from "./ui.js";
-import { getIdentity, signCall, backupKey, restoreKey, supported, sha256hex } from "./identity.js";
+import { getIdentity, signCall, backupKey, restoreKey, supported, sha256hex, exportForNear } from "./identity.js";
 import { canonical, memoPayload, dueMs, invoiceTotal, fromUnits, makeInvoiceId } from "./lib.js";
 
 initTheme();
@@ -109,6 +109,28 @@ function setDefaultDue() {
   $("#due").value = d.toISOString().slice(0, 10);
 }
 
+// ---- get your money out: export the key in NEAR wallet format ----------------------------------
+let hideTimer;
+function setupExport() {
+  const box = $("#keybox");
+  const hide = () => { box.hidden = true; $("#keyval").textContent = ""; clearTimeout(hideTimer); };
+  $("#exportNear").onclick = () => {
+    if (!confirm("This key controls your account and every USDC in it. Anyone who sees it can take your money.\n\nMake sure nobody can see your screen. Show it now?")) return;
+    try {
+      const k = exportForNear();
+      $("#keyval").textContent = k.privateKey;
+      $("#keyacct").textContent = k.account;
+      const base = cfg.explorerTx ? cfg.explorerTx.replace(/txns\/$/, "address/") : "";
+      $("#keyexp").innerHTML = cfg.mode === "live" && base ? `<a href="${base}${k.account}" target="_blank" rel="noopener" style="color:#fff">See your balance on the explorer</a>` : "";
+      box.hidden = false;
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(hide, 60000); // hides itself after a minute
+    } catch (err) { toast(err.message, "err"); }
+  };
+  $("#copyKey").onclick = (e) => copy($("#keyval").textContent, e.target);
+  $("#hideKey").onclick = hide;
+}
+
 // ---- boot ----------------------------------------------------------------------------------
 (async function boot() {
   cfg = await api("/api/config");
@@ -125,6 +147,7 @@ function setDefaultDue() {
   $("#csv").href = `/api/owners/${me.account}/export.csv`;
   $("#copyAcct").onclick = (e) => copy(me.account, e.target);
   $("#backup").onclick = backupKey;
+  setupExport();
   $("#restore").onchange = async (e) => {
     try { await restoreKey(await e.target.files[0].text()); toast("Account restored. Reloading."); setTimeout(() => location.reload(), 600); }
     catch (err) { toast(err.message, "err"); }

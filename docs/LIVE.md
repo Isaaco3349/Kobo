@@ -23,7 +23,7 @@ Easiest is to use the implicit accounts keygen printed (the 64-hex id **is** the
 
 | Account | Role | Needs |
 | --- | --- | --- |
-| relayer | pays gas, creates each freelancer's account, registers it for USDC | about 0.5 NEAR to start (each new freelancer costs about 0.003 NEAR) |
+| relayer | pays gas, creates each freelancer's account, registers it for USDC | about 0.5 NEAR to start (each new freelancer costs about 0.012 NEAR: 0.01 sent to their account for withdrawal fees, plus USDC registration) |
 | verifier | records payments on the contract | 0.05 NEAR |
 
 Testnet NEAR is free from a faucet. If you prefer named accounts (`kobo-relayer.near`), create them in any NEAR wallet and use their key.

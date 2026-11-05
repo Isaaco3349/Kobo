@@ -40,7 +40,7 @@ export const config = {
   relayerAccount: env.RELAYER_ACCOUNT_ID || "",
   relayerKey: env.RELAYER_PRIVATE_KEY || "", // "ed25519:..."; never commit; env only
   verifierKey: env.VERIFIER_PRIVATE_KEY || "",
-  fundNear: env.RELAYER_FUND_NEAR || "0.001", // sent to a brand-new freelancer account so it exists on-chain
+  fundNear: env.RELAYER_FUND_NEAR || "0.01", // sent to a brand-new freelancer account: it must exist on-chain, and needs a little NEAR to pay the fee when the freelancer withdraws USDC
 
   dbPath: env.KOBO_DB || fileURLToPath(new URL("../data/db.json", import.meta.url)),
   pollMs: Number(env.KOBO_POLL_MS || 15000),

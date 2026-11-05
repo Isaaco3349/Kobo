@@ -1,6 +1,7 @@
 // The freelancer's account lives in their browser: an ed25519 key whose public key (hex) is
 // their NEAR implicit account id. They never hold NEAR: the relayer pays gas for signed calls.
 import { buildEnvelope } from "./sign.js";
+import { nearKeyFromJwk } from "./nearkey.js";
 
 const KEY = "kobo.identity.v1";
 const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -38,6 +39,15 @@ export async function signCall(method, args, cfg) {
     sha256: async (b) => new Uint8Array(await crypto.subtle.digest("SHA-256", b)),
     sign: async (m) => new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, id.priv, m)),
   });
+}
+
+/** The key in NEAR's own format, for importing the account into a NEAR wallet. Never sent anywhere. */
+export function exportForNear() {
+  const raw = JSON.parse(localStorage.getItem(KEY) || "null");
+  if (!raw) throw new Error("No account found in this browser");
+  const k = nearKeyFromJwk(raw.jwk);
+  if (k.accountId !== raw.account) throw new Error("Stored key does not match the account. Restore your backup file.");
+  return { account: raw.account, privateKey: k.privateKey };
 }
 
 export function backupKey() {

@@ -81,6 +81,11 @@ table.ledger th:last-child, table.ledger td:last-child { text-align: right; }
 .foot .num { font: 800 34px var(--sans); letter-spacing: -.04em; }
 .foot .tiny { font-size: 10px; opacity: .75; max-width: 220px; }
 
+/* ---- key export ---- */
+.keybox { margin-top: 18px; background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.35); padding: 14px; font-size: 11px; max-width: 360px; }
+.keybox code { display: block; word-break: break-all; background: rgba(0,0,0,.28); padding: 10px; margin: 8px 0; font-size: 11px; user-select: all; }
+.keybox p { margin: 8px 0; }
+
 /* ---- sections ---- */
 section.block { padding: 56px 0; border-bottom: 1px solid var(--rule); }
 section.block .head { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 26px; flex-wrap: wrap; }

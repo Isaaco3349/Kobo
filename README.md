@@ -45,6 +45,10 @@ Honesty first, because the demo has to run anywhere.
 
 **Status of live mode:** the live adapter is written and tested against a fake NEAR RPC that decodes every transaction it sends and checks it against the reference `@near-js` libraries (byte-for-byte). It has **not yet been run against the real network by the author**. Setup and a one-payment rehearsal are in [docs/LIVE.md](docs/LIVE.md); `npm run doctor` checks every dependency.
 
+## Getting your money out
+
+The freelancer's account is a normal NEAR account whose key is held in the browser. On the home page, **Export for NEAR wallet** shows the key in NEAR's own format (`ed25519:...`). In any NEAR wallet choose *Import account*, then *Private key*, paste it, and the USDC can be sent anywhere. New accounts are sent 0.01 NEAR so the freelancer can pay the small fee for that transfer. The conversion is covered by tests: a real `@near-js/crypto` key pair built from the exported string resolves to the same account and its signatures verify against the browser's key. **Back up key** saves the same key as a file you can restore on another device.
+
 ## What the statuses mean
 
 | Status | Meaning |
@@ -93,7 +97,7 @@ scripts/     seed.js
 
 ```sh
 npm install                       # dev only: reference NEAR libraries used by the parity tests
-npm test                          # 23 Node tests: money maths, paid/refund/cancel flows, relayer rejections,
+npm test                          # 26 Node tests: money maths, paid/refund/cancel flows, relayer rejections,
                                   # trustless USDC path, background poller, CSV injection, live adapter
                                   # against a fake RPC, byte parity with @near-js
 cd contract && cargo test         # 16 contract tests

@@ -37,11 +37,19 @@
       <div>
         <div class="eyebrow">00 / Your desk</div>
         <h2>Your desk<br>at a glance</h2>
-        <p class="copy">Your account was created in this browser. It is a NEAR account you control, and it holds no NEAR because it never needs to.<b id="acctFull" style="word-break:break-all;font-weight:600"></b></p>
+        <p class="copy">Your account was created in this browser. It is a NEAR account you control. KOBO pays the network fees for your invoices and sends it a few cents of NEAR so you can withdraw your USDC any time.<b id="acctFull" style="word-break:break-all;font-weight:600"></b></p>
         <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn white small" id="copyAcct">Copy account</button>
           <button class="btn white small" id="backup">Back up key</button>
+          <button class="btn white small" id="exportNear">Export for NEAR wallet</button>
           <label class="btn white small" style="cursor:pointer">Restore<input type="file" id="restore" accept="application/json" hidden></label>
+        </div>
+        <div class="keybox" id="keybox" hidden>
+          <div class="eyebrow">Your private key (secret)</div>
+          <code id="keyval"></code>
+          <p>Your account name is <b id="keyacct" style="word-break:break-all"></b>. In any NEAR wallet choose <b>Import account</b>, then <b>Private key</b>, and paste the key above. You can then send your USDC anywhere. Never share this key or take a screenshot of it. It hides itself after a minute.</p>
+          <p id="keyexp"></p>
+          <button class="btn white small" id="copyKey">Copy key</button> <button class="btn white small" id="hideKey">Hide</button>
         </div>
       </div>
       <div>

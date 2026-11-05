@@ -1,5 +1,6 @@
 // Live-mode logic tested against a fake NEAR RPC that DECODES every transaction we send using the
 // reference library, then checks what the relayer / verifier actually put on the wire.
+import "./env.js"; // must stay first
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";

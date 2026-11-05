@@ -82,7 +82,15 @@ await step("6. NEAR Intents (1Click)", async () => {
     warn(`1Click's USDC contract is ${usdcNear.contractAddress}, USDC_CONTRACT is ${config.usdcContract}`, "set USDC_CONTRACT to the 1Click value for mainnet");
   const origin = tokens.find((t) => t.symbol === "USDC" && t.blockchain === "arb") || tokens.find((t) => t.symbol === "USDC" && t.blockchain === "eth");
   if (!origin) return warn("no EVM USDC found to test a quote with");
-  const q = await oc.quote({ originAsset: origin.assetId, amountOutUnits: "1000000", recipient: config.relayerAccount || "example.near", refundTo: "0x2527D02599Ba641c19FEa793cD0F167589a0f10D", deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(), dry: true });
+  // A dry quote charges nothing. Use a plain 64-hex account (valid on every network) as the recipient;
+  // a testnet name like x.testnet is not a valid mainnet destination and 1Click rejects it.
+  const recipient = relayerKey ? Buffer.from(relayerKey.pub).toString("hex") : "a".repeat(64);
+  let q;
+  try {
+    q = await oc.quote({ originAsset: origin.assetId, amountOutUnits: "1000000", recipient, refundTo: "0x2527D02599Ba641c19FEa793cD0F167589a0f10D", deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(), dry: true });
+  } catch (e) {
+    return bad(`dry quote failed: ${e.message}`, "send me this exact line; the rest of the app does not depend on it for the testnet rehearsal");
+  }
   ok(`dry quote works: pay ${q.quote.amountInFormatted} ${origin.symbol} on ${origin.blockchain} -> 1.00 USDC on NEAR (nothing was charged)`);
 });
 

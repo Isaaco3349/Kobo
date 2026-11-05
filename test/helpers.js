@@ -1,3 +1,4 @@
+import "./env.js"; // must stay first: keeps tests away from the real .env and the real network
 import crypto from "node:crypto";
 import { canonical, memoPayload, dueMs, invoiceTotal, makeInvoiceId } from "../web/lib.js";
 import { sha256hex } from "../server/ids.js";
@@ -35,6 +36,7 @@ export function createEnvelope(id, details, ident, overrides = {}) {
 export const newId = () => makeInvoiceId(crypto.randomBytes(8));
 
 export async function startApp(opts = {}) {
+  if (base.mode !== "demo") throw new Error("Refusing to run tests in live mode (would use real keys)");
   const app = createApp({ config: { ...base, dbPath: null }, store: new Store(null), processingMs: 0, ...opts });
   await new Promise((r) => app.server.listen(0, r));
   const url = `http://127.0.0.1:${app.server.address().port}`;
