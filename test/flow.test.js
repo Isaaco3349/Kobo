@@ -194,3 +194,18 @@ test("prepare hands out strictly increasing nonces", async () => {
     assert.ok(p2.body.expires_at_ms > Date.now());
   } finally { await app.close(); }
 });
+
+test("network trouble is a clear 503 with a reason, not a bare 'Internal error'", async () => {
+  const { RpcError } = await import("../server/near-rpc.js");
+  const acct = "a".repeat(64);
+  for (const boom of [new TypeError("fetch failed"), new RpcError({ message: "node is syncing" })]) {
+    const stub = { mode: "demo", prepare: async () => { throw boom; }, sponsorship: async () => ({}), view: async () => null };
+    const app = await startApp({ chain: stub });
+    try {
+      const r = await app.api(`/api/prepare/${acct}`);
+      assert.equal(r.status, 503);
+      assert.match(r.body.error, /NEAR network did not respond properly/);
+      assert.match(r.body.error, /try again/i);
+    } finally { await app.close(); }
+  }
+});

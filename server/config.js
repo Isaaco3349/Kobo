@@ -30,10 +30,12 @@ export const config = {
   network,
   contractId: env.KOBO_CONTRACT || "kobo-invoices.testnet",
   verifierId: env.VERIFIER_ACCOUNT_ID || env.KOBO_VERIFIER || "kobo-verifier.testnet",
-  rpcUrl: env.NEAR_RPC_URL || (network === "mainnet" ? "https://rpc.mainnet.near.org" : "https://rpc.testnet.near.org"),
+  // Comma-separated list = failover order. FastNEAR's free endpoints first (the official public nodes throttle hard).
+  rpcUrl: env.NEAR_RPC_URL || (network === "mainnet" ? "https://free.rpc.fastnear.com,https://rpc.mainnet.near.org" : "https://test.rpc.fastnear.com,https://rpc.testnet.near.org"),
   explorerTx: env.KOBO_EXPLORER_TX || (network === "mainnet" ? "https://nearblocks.io/txns/" : "https://testnet.nearblocks.io/txns/"),
   usdcContract: env.USDC_CONTRACT || (network === "mainnet" || env.KOBO_MODE !== "live" ? MAINNET_USDC : ""),
 
+  intentsContract: env.INTENTS_CONTRACT || "intents.near", // holds swapped funds until we withdraw them to the freelancer
   oneClickUrl: env.ONECLICK_URL || "https://1click.chaindefuser.com",
   oneClickJwt: env.ONECLICK_JWT || "", // optional; without it 1Click charges its default fee
 

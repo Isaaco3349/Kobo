@@ -136,8 +136,10 @@ export class LiveIntents {
       amount: String(amountOutUnits),
       refundTo,
       refundType: "ORIGIN_CHAIN",
+      // NEAR-side assets are no longer delivered straight to a NEAR account by 1Click ("pair not available"):
+      // the swap pays into an account's balance inside intents.near, and KOBO then withdraws it (chain-live.js).
       recipient,
-      recipientType: "DESTINATION_CHAIN",
+      recipientType: "INTENTS",
       deadline,
     };
     const res = await this._json(await fetch(`${this.base}/v0/quote`, { method: "POST", headers: this._headers(), body: JSON.stringify(body) }));

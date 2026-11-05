@@ -41,6 +41,12 @@ class FakeRpc {
     this.invoices = {};
     this.sent = [];
     this.failWith = null;
+    this.dropResponse = false;
+    this.lastResult = null;
+  }
+  async call(method) {
+    if (method === "tx" && this.lastResult) return this.lastResult;
+    throw new Error(`unexpected rpc call ${method}`);
   }
   async finalBlock() { return { hash: b58encode(crypto.randomBytes(32)), height: this.height }; }
   async viewAccount(a) { return this.accounts.has(a) ? { amount: "0" } : null; }
@@ -70,7 +76,10 @@ class FakeRpc {
         this._call(da.receiverId, da.senderId, da.actions[0].functionCall);
       }
     }
-    return { transaction: { hash: "TX" + this.sent.length }, transaction_outcome: { outcome: { status: { SuccessReceiptId: "x" }, tokens_burnt: "300000000000000000000" } }, receipts_outcome: [{ outcome: { status: { SuccessValue: "" }, tokens_burnt: "1000000000000000000000" } }] };
+    const result = { transaction: { hash: "TX" + this.sent.length }, transaction_outcome: { outcome: { status: { SuccessReceiptId: "x" }, tokens_burnt: "300000000000000000000" } }, receipts_outcome: [{ outcome: { status: { SuccessValue: "" }, tokens_burnt: "1000000000000000000000" } }] };
+    this.lastResult = result;
+    if (this.dropResponse) { this.dropResponse = false; throw new TypeError("fetch failed"); } // accepted, but we never hear back
+    return result;
   }
   _call(receiver, predecessor, fc) {
     const args = JSON.parse(Buffer.from(fc.args).toString());
@@ -247,3 +256,66 @@ test("parseKey accepts 64-byte and 32-byte keys, rejects mismatches", () => {
 
 import { b58decode } from "../web/borsh.js";
 const b58decodeSeed = (s) => b58decode(s.slice(8)).slice(0, 32);
+
+test("prepare rate limit counts only real account creations, not repeat calls", { skip }, async () => {
+  const { config, store, chain } = setup();
+  config.provisionPerIpHour = 1;
+  const app = createApp({ config, store, chain, intents: new MockIntents(store, { processingMs: 0 }) });
+  await new Promise((r) => app.server.listen(0, r));
+  const url = `http://127.0.0.1:${app.server.address().port}`;
+  const get = async (acct) => (await fetch(`${url}/api/prepare/${acct}`)).status;
+  try {
+    const a = freelancer(), b = freelancer();
+    assert.equal(await get(a.account), 200, "first new account is created");
+    for (let i = 0; i < 6; i++) assert.equal(await get(a.account), 200, "retrying for an existing account is free");
+    assert.equal(await get(b.account), 429, "a second NEW account from the same address is refused");
+  } finally { await new Promise((r) => app.server.close(r)); }
+});
+
+test("a dropped connection after the network accepted the transaction is recovered by hash, never re-sent", { skip }, async () => {
+  const { chain, rpc } = setup();
+  chain.pollMs = 1;
+  const me = freelancer();
+  const prep = await chain.prepare(me.account);
+  const before = rpc.sent.length;
+  rpc.dropResponse = true;
+  const env = await me.envelope(prep, "create_invoice", createArgs(newId(), sampleDetails(), me.account));
+  const tx = await chain.submitDelegate(env);
+  assert.equal(rpc.sent.length, before + 1, "sent exactly once");
+  assert.ok(tx.hash && tx.relayed);
+});
+
+test("withdrawToOwner: verifier calls intents.near ft_withdraw with 1 yocto, 100 Tgas, no msg", { skip }, async () => {
+  const { chain, rpc, config } = setup();
+  config.intentsContract = "intents.near";
+  const me = freelancer();
+  const w = await chain.withdrawToOwner({ to: me.account, amount: "1500000" });
+  assert.equal(w.hash, "TX1");
+  const tx = rpc.sent[0];
+  assert.equal(tx.signer, "kobo-verifier.testnet");
+  assert.equal(tx.receiver, "intents.near");
+  assert.ok(tx.sigOk && tx.nonceOk);
+  const fc = tx.actions[0].functionCall;
+  assert.equal(fc.methodName, "ft_withdraw");
+  assert.equal(fc.deposit, 1n);
+  assert.equal(fc.gas, 100n * 10n ** 12n);
+  assert.deepEqual(JSON.parse(Buffer.from(fc.args).toString()), { amount: "1500000", receiver_id: me.account, token: "usdc.test" });
+});
+
+test("live Intents quotes pay into KOBO's intents balance (recipientType INTENTS)", async () => {
+  const { LiveIntents } = await import("../server/intents.js");
+  const seen = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/v0/tokens")) return new Response(JSON.stringify([{ symbol: "USDC", blockchain: "near", assetId: "nep141:usdc-near" }]), { status: 200 });
+    seen.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ quote: {} }), { status: 201 });
+  };
+  try {
+    const oc = new LiveIntents({ oneClickUrl: "https://x.test", oneClickJwt: "" });
+    await oc.quote({ originAsset: "nep141:o", amountOutUnits: "1000000", recipient: "kobo-verifier.testnet", refundTo: "0xabc", deadline: "2030-01-01T00:00:00Z", dry: true });
+  } finally { globalThis.fetch = real; }
+  assert.equal(seen[0].recipientType, "INTENTS");
+  assert.equal(seen[0].recipient, "kobo-verifier.testnet");
+  assert.equal(seen[0].swapType, "EXACT_OUTPUT");
+});

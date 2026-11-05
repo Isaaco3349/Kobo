@@ -10,22 +10,57 @@ export class RpcError extends Error {
 
 const b64 = (s) => Buffer.from(s).toString("base64");
 
+const TRANSIENT_HTTP = new Set([429, 500, 502, 503, 504]);
+const TRANSIENT_RPC = new Set(["INTERNAL_ERROR", "TIMEOUT_ERROR"]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isNetworkError = (e) =>
+  ["TypeError", "TimeoutError", "AbortError"].includes(e?.name) || /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket|timeout|aborted/i.test(`${e?.message} ${e?.cause?.code || ""}`);
+
 export class Rpc {
-  constructor(url, fetchImpl = fetch) {
-    this.url = url;
+  /** Public RPC nodes are rate limited and flaky: every call has a timeout, and reads are retried
+   *  with backoff. A transaction (send_tx) is NEVER blindly re-sent; the caller looks it up by hash. */
+  constructor(url, fetchImpl = fetch, { timeoutMs = 20000, retries = 3, baseDelayMs = 400 } = {}) {
+    // `url` may be a comma-separated list: attempts rotate through it, so one throttled provider does not block us.
+    this.urls = String(url).split(",").map((u) => u.trim()).filter(Boolean);
+    this.url = this.urls[0];
     this.fetch = fetchImpl;
+    this.timeoutMs = timeoutMs;
+    this.retries = retries;
+    this.baseDelayMs = baseDelayMs;
   }
 
   async call(method, params) {
-    const res = await this.fetch(this.url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "kobo", method, params }),
-    });
-    if (!res.ok) throw new Error(`NEAR RPC ${res.status} from ${this.url}`);
-    const j = await res.json();
-    if (j.error) throw new RpcError(j.error);
-    return j.result;
+    const retryable = method !== "send_tx" && method !== "broadcast_tx_commit";
+    const attempts = retryable ? this.retries + 1 : 1;
+    let last;
+    for (let i = 0; i < attempts; i++) {
+      if (i) await sleep(this.baseDelayMs * 2 ** (i - 1) + Math.random() * 100);
+      const url = this.urls[i % this.urls.length];
+      try {
+        const res = await this.fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: "kobo", method, params }),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+        if (!res.ok) {
+          last = new Error(`NEAR RPC ${res.status} from ${url}`);
+          if (TRANSIENT_HTTP.has(res.status)) continue;
+          throw last;
+        }
+        const j = await res.json();
+        if (j.error) {
+          const e = new RpcError(j.error);
+          if (retryable && TRANSIENT_RPC.has(e.cause_name)) { last = e; continue; }
+          throw e;
+        }
+        return j.result;
+      } catch (e) {
+        if (e instanceof RpcError || !retryable || !isNetworkError(e)) throw e;
+        last = e;
+      }
+    }
+    throw last;
   }
 
   async finalBlock() {

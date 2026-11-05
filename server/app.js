@@ -38,7 +38,7 @@ export function createApp({ config = defaultConfig, store, chain, intents, proce
     if (config.mode !== "live") return;
     const now = Date.now();
     const recent = (hits.get(ip) || []).filter((t) => now - t < 3600_000);
-    if (recent.length >= config.provisionPerIpHour) throw new ApiError("Too many account setups from this address. Try again later.", 429);
+    if (recent.length >= config.provisionPerIpHour) throw new ApiError("Too many new accounts were set up from this address. Try again later.", 429);
     const day = new Date(now).toISOString().slice(0, 10);
     if (globalDay.day !== day) globalDay = { day, n: 0 };
     if (globalDay.n >= config.provisionGlobalDay) throw new ApiError("Daily account setup limit reached.", 429);
@@ -80,8 +80,9 @@ export function createApp({ config = defaultConfig, store, chain, intents, proce
     if (m === "GET" && p === "/api/tokens") return json(res, 200, await intents.listTokens());
 
     if ((g = p.match(/^\/api\/prepare\/([0-9a-f]{64})$/)) && m === "GET") {
-      limitProvisioning(req.socket.remoteAddress || "?");
-      return json(res, 200, await chain.prepare(g[1]));
+      const ip = req.socket.remoteAddress || "?";
+      // charged only if this call really creates an account at the relayer's expense
+      return json(res, 200, await chain.prepare(g[1], Date.now(), { beforeProvision: () => limitProvisioning(ip) }));
     }
     if (m === "POST" && p === "/api/invoices") {
       const body = await readBody(req);
@@ -165,8 +166,13 @@ export function createApp({ config = defaultConfig, store, chain, intents, proce
       await route(req, res, new URL(req.url, `http://${req.headers.host || "localhost"}`));
     } catch (e) {
       if (e instanceof ApiError) return json(res, e.status || 400, { error: e.message });
-      console.error(e);
-      json(res, 500, { error: "Internal error" });
+      const net = e?.name === "RpcError" || /fetch failed|NEAR RPC|aborted|timeout|ECONN|ENOTFOUND|EAI_AGAIN/i.test(`${e?.message} ${e?.cause?.code || ""}`);
+      console.error(`[${req.method} ${req.url}] ${e?.name || "Error"}: ${e?.message}${net ? "" : "\n" + e?.stack}`);
+      if (net) {
+        const why = String(e?.cause?.code || e?.message || "").slice(0, 120);
+        return json(res, 503, { error: `The NEAR network did not respond properly (${why}). Nothing was lost. Please try again in a moment.` });
+      }
+      json(res, 500, { error: "Internal error. The server log has the details." });
     }
   });
   return { server, store, chain, intents, svc, config };

@@ -13,6 +13,7 @@
     "test": "node --test test/*.test.js",
     "seed": "node scripts/seed.js",
     "doctor": "node scripts/doctor.js",
+    "probe": "node scripts/probe.js",
     "keygen": "node scripts/keygen.js"
   },
   "devDependencies": {

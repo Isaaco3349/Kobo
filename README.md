@@ -40,7 +40,7 @@ Honesty first, because the demo has to run anywhere.
 | Freelancer account and signatures | **Real.** Ed25519 key in the browser; the public key is the 64-hex NEAR implicit account id. Server verifies every signature. | Same key, real `SignedDelegateAction` (NEP-366) |
 | Relayer rules (own contract only, allowlisted methods, nonce, expiry, daily cap) | **Real.** Covered by tests. | Same rules on real transactions |
 | Invoice contract | `contract/src/lib.rs` is real Rust with 16 passing tests. Demo mode runs a JS ledger that enforces the **same rules**. | Deployed contract on NEAR testnet |
-| NEAR Intents (1Click) | **Simulated** by a deterministic local mock with the same request/response shapes (EXACT_OUTPUT quote, deposit address, status values). | `server/intents.js` `LiveIntents` calls `https://1click.chaindefuser.com` |
+| NEAR Intents (1Click) | **Simulated** by a deterministic local mock with the same request/response shapes (EXACT_OUTPUT quote, deposit address, status values). | `server/intents.js` `LiveIntents` calls `https://1click.chaindefuser.com`. The swap pays into KOBO's settlement balance in `intents.near`; KOBO then calls `ft_withdraw` to send the invoice amount to the freelancer's NEAR account. |
 | Gas | **Simulated** (a fixed fee is recorded as "paid by the relayer"). | Real gas paid by a funded relayer account |
 
 **Status of live mode:** the live adapter is written and tested against a fake NEAR RPC that decodes every transaction it sends and checks it against the reference `@near-js` libraries (byte-for-byte). It has **not yet been run against the real network by the author**. Setup and a one-payment rehearsal are in [docs/LIVE.md](docs/LIVE.md); `npm run doctor` checks every dependency.
@@ -78,6 +78,7 @@ The invoice text lives off-chain. Its SHA-256 (over canonical JSON of the id, ow
 
 ## Trust assumptions (please read)
 
+* **Cross-chain payments pass through a KOBO settlement balance.** NEAR Intents delivers NEAR-side assets into an account's balance inside `intents.near`, so the swap output lands in KOBO's verifier account first and is withdrawn to the freelancer straight away (per invoice, exact amount, retried safely). Until that withdrawal runs, the funds are in KOBO's custody.
 * **Cross-chain payments are attested.** When a client pays from another chain, the KOBO backend reads the 1Click status and a `verifier` account records the result on-chain (`attest_payment`). That is a trust assumption in the backend. The contract limits the damage: it can only mark an *open* invoice paid, once, with an amount at least the invoice total.
 * **Direct USDC payments on NEAR are trustless.** A client holding USDC on NEAR can `ft_transfer_call` to the contract with the invoice id as `msg`. `ft_on_transfer` checks the token and amount, forwards the money to the owner, and refunds the payer if the forward fails.
 * **The demo key lives in browser storage.** Use **Back up key**. Clearing site data without a backup loses the account.
@@ -97,7 +98,7 @@ scripts/     seed.js
 
 ```sh
 npm install                       # dev only: reference NEAR libraries used by the parity tests
-npm test                          # 26 Node tests: money maths, paid/refund/cancel flows, relayer rejections,
+npm test                          # 37 Node tests: money maths, paid/refund/cancel flows, relayer rejections,
                                   # trustless USDC path, background poller, CSV injection, live adapter
                                   # against a fake RPC, byte parity with @near-js
 cd contract && cargo test         # 16 contract tests

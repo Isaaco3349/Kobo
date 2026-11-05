@@ -69,6 +69,8 @@ npm start          # "Live mode on NEAR mainnet: contract ..., relayer ..."
 
 ## 6. One real payment (mainnet, about 1 USDC)
 
+**Do not send real money while `NEAR_NETWORK=testnet`.** Intents is mainnet-only, so a deposit address from a testnet setup is a *real* mainnet address: the swap would run for real and deliver USDC to a mainnet account that the relayer has not registered for USDC. On testnet, stop at "Get payment details". Make the real payment only with the mainnet setup below.
+
 1. Open the app, create a 1 USDC invoice. The first time takes a few seconds: the relayer creates your account and registers it for USDC.
 2. Open the invoice link, choose a token you hold (say USDC on Base), enter your own wallet as the refund address, get the payment details.
 3. Send the exact amount shown from your wallet to the deposit address. Optionally paste the transaction hash.
@@ -85,4 +87,11 @@ Record this for the demo video. If the swap fails or times out, the funds go bac
 | doctor: "key is not an access key of ..." | the private key does not belong to that account |
 | "Account is not set up yet" | the relayer has too little NEAR to create accounts; fund it |
 | Invoice stays *Unpaid* after sending | wrong token or chain, or amount below the quote; check the deposit address and amount, paste the tx hash |
+| "The NEAR network did not respond properly" | the public RPC is slow or rate limited. KOBO retries reads by itself; wait a moment and retry. If it keeps happening set `NEAR_RPC_URL` in `.env` to another provider from docs.near.org/api/rpc/providers. Nothing is lost: a transaction that was accepted is found again by its hash, never sent twice |
+| "Too many new accounts were set up from this address" | the limit (`PROVISION_PER_IP_HOUR`, default 10) counts only brand-new accounts the relayer pays for, not retries. Restarting the server resets it |
 | Contract rejected: "Only the verifier can attest" | contract was initialised with a different verifier than `VERIFIER_ACCOUNT_ID` |
+
+
+## Why payments go through `intents.near`
+
+1Click no longer quotes swaps that deliver straight to a NEAR account (`recipientType: DESTINATION_CHAIN` returns "Quoting for this pair is not available"). KOBO quotes with `recipientType: INTENTS`, recipient = `VERIFIER_ACCOUNT_ID`; when the status is `SUCCESS` the verifier calls `ft_withdraw` on `intents.near` (token = USDC contract, 1 yoctoNEAR, 100 Tgas, no `msg`) to the freelancer, then records the payment on the KOBO contract. The verifier account therefore needs a little NEAR for gas. This has only been exercised against fakes so far; the first real run is the one-USDC mainnet payment.

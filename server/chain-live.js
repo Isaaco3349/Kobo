@@ -6,7 +6,7 @@
 import crypto from "node:crypto";
 import { canonical, HEX64 } from "../web/lib.js";
 import {
-  GAS_30T, delegateSigningPayload, encodeSignedDelegate, encodeTransaction, encodeSignedTransaction,
+  GAS_30T, GAS_100T, delegateSigningPayload, encodeSignedDelegate, encodeTransaction, encodeSignedTransaction,
   b58decode, b58encode, hexToBytes, utf8, toBase64, nearToYocto,
 } from "../web/borsh.js";
 import { Rpc, RpcError, outcomeFailure, feeNear } from "./near-rpc.js";
@@ -40,6 +40,7 @@ export class LiveChain {
     this.verifier = parseKey(config.verifierKey);
     this._queues = new Map();
     this._prov = new Map();
+    this.pollMs = 3000; // how often to look a transaction up after a timeout (tests lower this)
   }
 
   // ---- low level ------------------------------------------------------------------------------
@@ -62,11 +63,13 @@ export class LiveChain {
       try {
         return await this.rpc.sendTx(toBase64(signed), "EXECUTED");
       } catch (e) {
-        if (!(e instanceof RpcError) || !/TIMEOUT/i.test(e.cause_name + e.message)) throw e;
+        // A real rejection from the network is final. A timeout or dropped connection is not: the
+        // transaction may well have been accepted, so look it up by hash instead of failing or re-sending.
+        if (e instanceof RpcError && !/TIMEOUT/i.test(e.cause_name + e.message)) throw e;
         const txHash = b58encode(hash);
-        for (let i = 0; i < 8; i++) { // the tx was accepted; wait for it instead of failing
-          await sleep(3000);
-          try { return await this.rpc.call("tx", { tx_hash: txHash, sender_account_id: signerId, wait_until: "EXECUTED" }); } catch { /* keep waiting */ }
+        for (let i = 0; i < 10; i++) {
+          await sleep(this.pollMs);
+          try { return await this.rpc.call("tx", { tx_hash: txHash, sender_account_id: signerId, wait_until: "EXECUTED" }); } catch { /* not there yet */ }
         }
         throw e;
       }
@@ -90,19 +93,34 @@ export class LiveChain {
     return tx;
   }
 
+  /** Move USDC from KOBO's balance inside intents.near to the freelancer's NEAR account (verifier signs). */
+  async withdrawToOwner({ to, amount }) {
+    const token = this.config.usdcContract || "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
+    const args = { token, receiver_id: to, amount: String(amount) }; // no `msg`: a failed transfer is refunded, not lost
+    const result = await this._send(this.config.verifierId, this.verifier, this.config.intentsContract, [
+      { type: "FunctionCall", method: "ft_withdraw", args: utf8(canonical(args)), gas: GAS_100T, deposit: 1n },
+    ]);
+    const fail = outcomeFailure(result);
+    if (fail) throw new ApiError(`Withdrawal from NEAR Intents failed: ${fail}`, 502);
+    return { hash: result.transaction?.hash, args };
+  }
+
   // ---- account provisioning (relayer pays) ----------------------------------------------------
-  ensureAccount(account) {
+  ensureAccount(account, hooks = {}) {
     if (!this._prov.has(account)) {
-      const p = this._ensureAccount(account).finally(() => this._prov.delete(account));
+      const p = this._ensureAccount(account, hooks).finally(() => this._prov.delete(account));
       this._prov.set(account, p);
     }
     return this._prov.get(account);
   }
 
-  async _ensureAccount(account) {
+  async _ensureAccount(account, hooks = {}) {
     const out = { created: false, registered: false };
+    let counted = false; // the caller's rate limit is charged once, and only when we really spend the relayer's money
+    const charge = () => { if (!counted) { counted = true; hooks.beforeProvision?.(); } };
     const relayerId = this.config.relayerAccount;
     if (!(await this.rpc.viewAccount(account))) {
+      charge();
       const r = await this._send(relayerId, this.relayer, account, [{ type: "Transfer", deposit: nearToYocto(this.config.fundNear) }]);
       const fail = outcomeFailure(r);
       if (fail) throw new ApiError(`Could not create the freelancer's account: ${fail}`, 502);
@@ -113,6 +131,7 @@ export class LiveChain {
       let bal;
       try { bal = await this.rpc.viewFunction(usdc, "storage_balance_of", { account_id: account }); } catch { bal = undefined; }
       if (bal === null) { // reachable and not registered yet
+        charge();
         const bounds = await this.rpc.viewFunction(usdc, "storage_balance_bounds", {});
         const r = await this._send(relayerId, this.relayer, usdc, [
           { type: "FunctionCall", method: "storage_deposit", args: utf8(canonical({ account_id: account, registration_only: true })), gas: GAS_30T, deposit: BigInt(bounds.min) },
@@ -126,9 +145,9 @@ export class LiveChain {
   }
 
   /** Called before the freelancer signs: makes sure the account exists, returns nonce + expiry. */
-  async prepare(account, now = Date.now()) {
+  async prepare(account, now = Date.now(), hooks = {}) {
     if (!HEX64.test(account)) throw new ApiError("Bad account");
-    await this.ensureAccount(account);
+    await this.ensureAccount(account, hooks);
     const nonce = await this.rpc.accessKeyNonce(account, "ed25519:" + b58encode(hexToBytes(account)));
     if (nonce === null) throw new ApiError("Your account's key is not visible on-chain yet. Try again in a few seconds.", 503);
     const block = await this.rpc.finalBlock();

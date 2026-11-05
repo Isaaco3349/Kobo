@@ -82,7 +82,7 @@ export class Invoices {
     refundTo = str(refundTo, 6, 128, "refundTo");
     if (/\s/.test(refundTo)) throw new ApiError("refundTo must be a single wallet address");
 
-    const common = { originAsset, amountOutUnits: inv.total, recipient: inv.owner, refundTo, invoiceId: id };
+    const common = { originAsset, amountOutUnits: inv.total, recipient: this.intents.mode === "live" ? this.config.verifierId : inv.owner, refundTo, invoiceId: id };
     const deadline = new Date(now + 30 * 60 * 1000).toISOString();
     try {
       await this.intents.quote({ ...common, deadline, dry: true }); // preview first; only commit on confirm
@@ -163,6 +163,15 @@ export class Invoices {
     } else if (st.status === "SUCCESS") {
       const dest = sd.destinationChainTxHashes?.[0];
       let settle = dest?.hash;
+      if (this.intents.mode === "live" && typeof this.chain.withdrawToOwner === "function") {
+        // The swap paid into KOBO's settlement balance inside intents.near; send exactly the invoice amount on to the freelancer.
+        if (!att.withdraw_tx) {
+          const w = await this.chain.withdrawToOwner({ to: inv.owner, amount: inv.total });
+          att.withdraw_tx = w.hash;
+          this.store.putInvoice(inv); // remember it, so a retry after a later failure never withdraws twice
+        }
+        settle = att.withdraw_tx;
+      }
       if (!settle && this.intents.mode === "demo" && typeof this.chain.recordSettlement === "function") settle = (await this.chain.recordSettlement({ to: inv.owner, amount: inv.total, now })).hash;
       if (sd.amountOut && BigInt(sd.amountOut) < BigInt(inv.total)) throw new ApiError("Intents delivered less than the invoice amount; not marking paid", 502);
       const tx = await this.chain.call({ method: "attest_payment", args: { id, received: inv.total, source_tx: settle || "" }, now });

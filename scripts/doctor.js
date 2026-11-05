@@ -80,18 +80,29 @@ await step("6. NEAR Intents (1Click)", async () => {
   ok(`USDC on NEAR is ${usdcNear.assetId}`);
   if (config.usdcContract && usdcNear.contractAddress && usdcNear.contractAddress !== config.usdcContract)
     warn(`1Click's USDC contract is ${usdcNear.contractAddress}, USDC_CONTRACT is ${config.usdcContract}`, "set USDC_CONTRACT to the 1Click value for mainnet");
-  const origin = tokens.find((t) => t.symbol === "USDC" && t.blockchain === "arb") || tokens.find((t) => t.symbol === "USDC" && t.blockchain === "eth");
-  if (!origin) return warn("no EVM USDC found to test a quote with");
   // A dry quote charges nothing. Use a plain 64-hex account (valid on every network) as the recipient;
   // a testnet name like x.testnet is not a valid mainnet destination and 1Click rejects it.
   const recipient = relayerKey ? Buffer.from(relayerKey.pub).toString("hex") : "a".repeat(64);
-  let q;
-  try {
-    q = await oc.quote({ originAsset: origin.assetId, amountOutUnits: "1000000", recipient, refundTo: "0x2527D02599Ba641c19FEa793cD0F167589a0f10D", deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(), dry: true });
-  } catch (e) {
-    return bad(`dry quote failed: ${e.message}`, "send me this exact line; the rest of the app does not depend on it for the testnet rehearsal");
+  const routes = [["USDC", "arb"], ["USDC", "base"], ["USDC", "eth"], ["USDC", "sol"], ["ETH", "eth"], ["ETH", "arb"], ["ETH", "base"], ["USDT", "eth"], ["USDT", "arb"]];
+  console.log("  testing payment routes (nothing is charged; takes about a minute)...");
+  const refund = (chain) => (chain === "sol" ? "So11111111111111111111111111111111111111112" : "0x2527D02599Ba641c19FEa793cD0F167589a0f10D");
+  let works = 0;
+  for (const [sym, chain] of routes) {
+    const t = tokens.find((x) => x.symbol === sym && x.blockchain === chain);
+    if (!t) continue;
+    let lastErr, hit = false;
+    for (const usdc of [1, 10, 50]) { // some routes have a minimum amount
+      try {
+        const q = await oc.quote({ originAsset: t.assetId, amountOutUnits: String(usdc * 1e6), recipient, refundTo: refund(chain), deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(), dry: true });
+        works++; hit = true;
+        ok(`${sym} on ${chain}: pay ${q.quote.amountInFormatted} ${sym} for ${usdc}.00 USDC`);
+        break;
+      } catch (e) { lastErr = e; }
+    }
+    if (!hit) warn(`${sym} on ${chain}: ${lastErr.message}`);
   }
-  ok(`dry quote works: pay ${q.quote.amountInFormatted} ${origin.symbol} on ${origin.blockchain} -> 1.00 USDC on NEAR (nothing was charged)`);
+  if (!works) bad("no payment route could be quoted", "this comes from the NEAR Intents service and is usually temporary. Wait a few minutes and run the doctor again. The testnet rehearsal does not depend on it");
+  else if (works < routes.length) console.log("  (routes marked ! are unavailable right now; clients can use any route marked \u2713)");
 });
 
 console.log(`\n${failed ? `✗ ${failed} problem(s)` : "✓ all required checks passed"}${warned ? `, ${warned} warning(s)` : ""}`);
