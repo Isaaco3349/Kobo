@@ -1,0 +1,160 @@
+{
+  "invoices": {
+    "HWJE-3ERM": {
+      "id": "HWJE-3ERM",
+      "owner": "92057b9b7137ac536b2d5bba0a831693003c72051761164911fbb6ae43df6641",
+      "client_name": "isaac",
+      "title": "Brand identity sprint",
+      "note": "checked",
+      "due_date": "2026-11-19",
+      "items": [
+        {
+          "description": "payment",
+          "qty": "1",
+          "unit_price": "10"
+        }
+      ],
+      "total": "10000000",
+      "currency": "USDC",
+      "due_ms": 1795132799000,
+      "memo_hash": "82e345592d57970f310fd87bfa13b6c10eb324a4da19860c923383de2db24fa5",
+      "status": "open",
+      "created_at": 1793858375111,
+      "create_tx": "7CTDWLHf2GnbBzaybvr8ddWxhbvyVKPbWtGQ91wjs88d",
+      "attempts": [],
+      "events": [
+        {
+          "at": 1793858375111,
+          "type": "created",
+          "text": "Invoice created and recorded on NEAR. Gas paid by the Kobo relayer.",
+          "tx": "7CTDWLHf2GnbBzaybvr8ddWxhbvyVKPbWtGQ91wjs88d"
+        }
+      ]
+    },
+    "C5FK-MDSE": {
+      "id": "C5FK-MDSE",
+      "owner": "92057b9b7137ac536b2d5bba0a831693003c72051761164911fbb6ae43df6641",
+      "client_name": "arinze",
+      "title": "payroll",
+      "note": "checked",
+      "due_date": "2026-11-19",
+      "items": [
+        {
+          "description": "payment",
+          "qty": "1",
+          "unit_price": "5"
+        }
+      ],
+      "total": "5000000",
+      "currency": "USDC",
+      "due_ms": 1795132799000,
+      "memo_hash": "42414d7d4352ff4fa64e8ec95010863dcbb61d0515993419f17add50d7ba07a1",
+      "status": "open",
+      "created_at": 1793860988806,
+      "create_tx": "2vzRaZS7RQkAqqdzWyQKX3YurojgnP71dMJ6QN9tY4mg",
+      "attempts": [
+        {
+          "created_at": 1793861051011,
+          "origin_asset": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+          "origin_symbol": "USDC",
+          "origin_chain": "arb",
+          "refund_to": "0xD0d20dFdc1aDfCeED388a5b4866aA8a988A5F3Ff",
+          "deposit_address": "0x9CCb5073eE68cB7c948410e55ef79E10e41C88B3",
+          "deposit_memo": null,
+          "amount_in": "5056155",
+          "amount_in_formatted": "5.056155",
+          "amount_in_usd": "5.055067926675",
+          "amount_out": "5000000",
+          "deadline": "2026-11-08T07:14:11.011Z",
+          "intents_status": "PENDING_DEPOSIT",
+          "origin_tx": null,
+          "settle_tx": null,
+          "refund_tx": null
+        }
+      ],
+      "events": [
+        {
+          "at": 1793860988806,
+          "type": "created",
+          "text": "Invoice created and recorded on NEAR. Gas paid by the Kobo relayer.",
+          "tx": "2vzRaZS7RQkAqqdzWyQKX3YurojgnP71dMJ6QN9tY4mg"
+        },
+        {
+          "at": 1793861051011,
+          "type": "quote",
+          "text": "Payment details issued: send 5.056155 USDC on Arbitrum."
+        }
+      ]
+    },
+    "SCEK-B9D2": {
+      "id": "SCEK-B9D2",
+      "owner": "92057b9b7137ac536b2d5bba0a831693003c72051761164911fbb6ae43df6641",
+      "client_name": "Timber",
+      "title": "Branding",
+      "note": "caption",
+      "due_date": "2026-11-19",
+      "items": [
+        {
+          "description": "Brand",
+          "qty": "1",
+          "unit_price": "30"
+        }
+      ],
+      "total": "30000000",
+      "currency": "USDC",
+      "due_ms": 1795132799000,
+      "memo_hash": "a2d2ecca0e1dd2d851e032d292204aa9b2eff4d2d4996e3b3ff75098adda66e6",
+      "status": "open",
+      "created_at": 1793894308247,
+      "create_tx": "5HKAFj8aRAx7vwoEFFxTf5DQ4Mq29jzXVWdS1wkStFV6",
+      "attempts": [
+        {
+          "created_at": 1793894494325,
+          "origin_asset": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+          "origin_symbol": "USDC",
+          "origin_chain": "arb",
+          "refund_to": "0x8B62F7656c32990DC1e3781945640C74CD70317b",
+          "deposit_address": "0x67a3A97c37202114AD1f6124c3187Fd4FBa9D8Ad",
+          "deposit_memo": null,
+          "amount_in": "30309155",
+          "amount_in_formatted": "30.309155",
+          "amount_in_usd": "30.302123276040",
+          "amount_out": "30000000",
+          "deadline": "2026-11-08T16:31:34.325Z",
+          "intents_status": "PENDING_DEPOSIT",
+          "origin_tx": null,
+          "settle_tx": null,
+          "refund_tx": null
+        }
+      ],
+      "events": [
+        {
+          "at": 1793894308247,
+          "type": "created",
+          "text": "Invoice created and recorded on NEAR. Gas paid by the Kobo relayer.",
+          "tx": "5HKAFj8aRAx7vwoEFFxTf5DQ4Mq29jzXVWdS1wkStFV6"
+        },
+        {
+          "at": 1793894494325,
+          "type": "quote",
+          "text": "Payment details issued: send 30.309155 USDC on Arbitrum."
+        }
+      ]
+    }
+  },
+  "chain": null,
+  "intents": {
+    "deposits": {}
+  },
+  "meta": {
+    "createdAt": 1793858212968
+  },
+  "sponsored": {
+    "92057b9b7137ac536b2d5bba0a831693003c72051761164911fbb6ae43df6641": {
+      "day": "2026-11-05",
+      "calls": 3,
+      "total_calls": 3,
+      "total_near": 0.000785
+    }
+  }
+}

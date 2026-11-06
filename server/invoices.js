@@ -7,6 +7,10 @@ export { ApiError };
 
 const CHAINS = { eth: "Ethereum", arb: "Arbitrum", base: "Base", sol: "Solana", btc: "Bitcoin", near: "NEAR" };
 
+// Where to look up a client's deposit transaction on the chain it was sent from.
+const ORIGIN_EXPLORERS = { eth: "https://etherscan.io/tx/", arb: "https://arbiscan.io/tx/", base: "https://basescan.org/tx/", sol: "https://solscan.io/tx/", btc: "https://mempool.space/tx/", near: "https://nearblocks.io/txns/" };
+export const originTxUrl = (chain, hash) => (ORIGIN_EXPLORERS[chain] && hash ? ORIGIN_EXPLORERS[chain] + hash : undefined);
+
 const str = (v, min, max, name) => {
   if (typeof v !== "string" || v.trim().length < min || v.length > max) throw new ApiError(`${name} must be ${min}-${max} characters`);
   return v.trim();
@@ -156,7 +160,7 @@ export class Invoices {
     if (st.status === "PROCESSING" || st.status === "KNOWN_DEPOSIT_TX") {
       if (inv.status !== "pending") {
         inv.status = "pending";
-        inv.events.push({ at: now, type: "deposit", text: "Deposit detected. NEAR Intents is converting it to USDC.", tx: originTx?.hash, url: originTx?.explorerUrl || undefined });
+        inv.events.push({ at: now, type: "deposit", text: "Deposit detected. NEAR Intents is converting it to USDC.", tx: originTx?.hash, url: originTx?.explorerUrl || originTxUrl(att.origin_chain, originTx?.hash) });
       }
     } else if (st.status === "INCOMPLETE_DEPOSIT") {
       if (!att.warned) { att.warned = true; inv.events.push({ at: now, type: "warning", text: "Deposit received but below the required amount. Send the remainder or it will be refunded." }); }

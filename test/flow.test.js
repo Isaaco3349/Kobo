@@ -209,3 +209,12 @@ test("network trouble is a clear 503 with a reason, not a bare 'Internal error'"
     } finally { await app.close(); }
   }
 });
+
+test("a deposit made on another chain links to that chain's explorer, not NEAR's", async () => {
+  const { originTxUrl } = await import("../server/invoices.js");
+  assert.equal(originTxUrl("base", "0xabc"), "https://basescan.org/tx/0xabc");
+  assert.equal(originTxUrl("arb", "0xabc"), "https://arbiscan.io/tx/0xabc");
+  assert.equal(originTxUrl("sol", "5xyz"), "https://solscan.io/tx/5xyz");
+  assert.equal(originTxUrl("unknown", "0xabc"), undefined);
+  assert.equal(originTxUrl("base", undefined), undefined);
+});

@@ -43,7 +43,16 @@ Honesty first, because the demo has to run anywhere.
 | NEAR Intents (1Click) | **Simulated** by a deterministic local mock with the same request/response shapes (EXACT_OUTPUT quote, deposit address, status values). | `server/intents.js` `LiveIntents` calls `https://1click.chaindefuser.com`. The swap pays into KOBO's settlement balance in `intents.near`; KOBO then calls `ft_withdraw` to send the invoice amount to the freelancer's NEAR account. |
 | Gas | **Simulated** (a fixed fee is recorded as "paid by the relayer"). | Real gas paid by a funded relayer account |
 
-**Status of live mode:** the live adapter is written and tested against a fake NEAR RPC that decodes every transaction it sends and checks it against the reference `@near-js` libraries (byte-for-byte). It has **not yet been run against the real network by the author**. Setup and a one-payment rehearsal are in [docs/LIVE.md](docs/LIVE.md); `npm run doctor` checks every dependency.
+**Status of live mode: verified on NEAR mainnet (6 Nov 2026).** One real payment was made end to end: a 1.00 USDC invoice, paid by sending 1.010224 USDC on Base, delivered as exactly 1.00 USDC on NEAR to the freelancer's account (which held 0.01 NEAR and paid no gas), then recorded on the contract.
+
+| Proof | Link |
+| --- | --- |
+| Contract (mainnet) | `kobo-isaac-app.near` |
+| Client's deposit on Base | [basescan.org/tx/0xc9cca1ba...e52b](https://basescan.org/tx/0xc9cca1ba265799d412d392b64652bc566f3fbf47c51b5a2bf7b804728108e52b) |
+| Settlement on NEAR | [nearblocks.io/txns/AeTuUYZi...uqSP](https://nearblocks.io/txns/AeTuUYZiWxt6WYs1eEFGZGFjxS2No9cdowfSo6vwuqSP) |
+| Freelancer's USDC | [nearblocks.io/address/92057b9b...6641/tokens](https://nearblocks.io/address/92057b9b7137ac536b2d5bba0a831693003c72051761164911fbb6ae43df6641/tokens) |
+
+Also tested against a fake NEAR RPC that decodes every transaction it sends and checks it against the reference `@near-js` libraries (byte-for-byte). Setup is in [docs/LIVE.md](docs/LIVE.md) and [docs/MAINNET.md](docs/MAINNET.md); `npm run doctor` checks every dependency.
 
 ## Getting your money out
 
@@ -89,7 +98,7 @@ The invoice text lives off-chain. Its SHA-256 (over canonical JSON of the id, ow
 ```
 server/      zero-dependency Node server: relay, ledger, Intents adapters, invoices, CSV
 web/         static UI (no build step); shared money/hash helpers in web/lib.js
-contract/    NEAR contract (Rust, near-sdk 5.30) with unit tests
+contract/    NEAR contract (Rust, near-sdk 5.20.1) with unit tests
 test/        node:test suites
 scripts/     seed.js
 ```
@@ -98,7 +107,7 @@ scripts/     seed.js
 
 ```sh
 npm install                       # dev only: reference NEAR libraries used by the parity tests
-npm test                          # 37 Node tests: money maths, paid/refund/cancel flows, relayer rejections,
+npm test                          # 38 Node tests: money maths, paid/refund/cancel flows, relayer rejections,
                                   # trustless USDC path, background poller, CSV injection, live adapter
                                   # against a fake RPC, byte parity with @near-js
 cd contract && cargo test         # 16 contract tests

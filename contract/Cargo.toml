@@ -2,7 +2,6 @@
 name = "kobo-invoices"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.86"
 description = "KOBO invoice registry: invoices recorded on NEAR, paid in USDC, gas sponsored via meta transactions."
 license = "MIT"
 
